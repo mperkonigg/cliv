@@ -1,10 +1,10 @@
 experiment_name: 'cliv'
-output_path: '/home/mperkonigg/Documents/experiments/run_outputs'
+output_path: '</path/to/output/>'
 matmul_precision: 'medium'
 
 datamodule:
     +class: cliv.datasets.ClivMMISDataModule
-    data_path: '/home/mperkonigg/data/MMIS/MMIS2024TASK1/'
+    data_path: '</path/to/dataset>'
     train_path: 'training'
     train_masks: ['label_a2']
     val_path: 'validation'
@@ -81,7 +81,7 @@ experiment:
         no_head_layers: 3
         num_classes: 2
         spatial_axes: [2, 3, 4]
-        pretrain_path: "/home/mperkonigg/Documents/experiments/run_outputs/185008fe4e036dc173b33e264361f61546f42ef1/checkpoints/last.ckpt"
+        pretrain_path: "path/to/pretrainmodel.pth" #will be reset automatically by run files
         seg_model: 
           +class: monai.networks.nets.UNet
           spatial_dims: 3 
@@ -110,4 +110,4 @@ trainer:
 
 logger:
     type: 'mlflow'
-    tracking_uri: "file:/home/mperkonigg/Documents/experiments/mlflow/"
+    tracking_uri: "file:<path/for/mlflow>" #or uri if running remotley

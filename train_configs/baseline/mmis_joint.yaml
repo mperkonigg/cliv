@@ -1,11 +1,11 @@
 experiment_name: 'cliv'
-output_path: '/home/mperkonigg/Documents/experiments/run_outputs'
+output_path: '</path/to/output/>'
 matmul_precision: 'medium'
 
 datamodule:
     +class: cliv.datasets.ClivDataModule
     dataset: 'MMIS'
-    data_path: '/home/mperkonigg/data/MMIS/MMIS2024TASK1/'
+    data_path: '</path/to/dataset>'
     train_path: 'training'
     train_masks: ['label_a1', 'label_a2', 'label_a3', 'label_a4']
     val_path: 'validation'
@@ -110,4 +110,4 @@ trainer:
 
 logger:
     type: 'mlflow'
-    tracking_uri: "file:/home/mperkonigg/Documents/experiments/mlflow/"
+    tracking_uri: "file:<path/for/mlflow>" #or uri if running remotley
