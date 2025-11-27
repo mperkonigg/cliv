@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Optional, Union
 
 from lightning import LightningDataModule
 from monai.transforms.compose import MapTransform
 from torch.utils.data import DataLoader
 
-from .cliv_dataset import ClivDataset, ClivMMISDataset, ClivDSTypes
+from .cliv_dataset import ClivQUIBDataset, ClivMMISDataset, ClivDSTypes
 
 
 class ClivDataModule(LightningDataModule):
@@ -23,9 +23,10 @@ class ClivDataModule(LightningDataModule):
         valtransforms: Optional[MapTransform] = None,
         testtransforms: Optional[MapTransform] = None,
         num_workers: int = 8,
-        dataset: ClivDSTypes | str = ClivDSTypes.GLEASON19,
+        dataset: ClivDSTypes | str = ClivDSTypes.MMIS,
         annotator_overlap: float = None,
         seed: int = 0,
+        task_id: Union[str, list[str]] = "task01",
     ):
         """Datamodule for cliv
 
@@ -63,7 +64,9 @@ class ClivDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.class_no = class_no
-        if type(dataset) == str:
+        self.task_id = task_id
+
+        if type(dataset) is str:
             self.dataset = ClivDSTypes[dataset]
         else:
             self.dataset = dataset
@@ -72,31 +75,7 @@ class ClivDataModule(LightningDataModule):
         self.seed = seed
 
     def setup(self, stage: str):
-        if self.dataset == ClivDSTypes.GLEASON19:
-            if stage == "fit":
-                self.train_data = ClivDataset(
-                    self.data_path,
-                    self.train_path,
-                    self.train_masks,
-                    self.traintransforms,
-                    class_no=self.class_no
-                )
-                self.val_data = ClivDataset(
-                    self.data_path,
-                    self.val_path,
-                    self.val_masks,
-                    self.valtransforms,
-                    class_no=self.class_no
-                )
-            elif stage == "test":
-                self.test_data = ClivDataset(
-                    self.data_path,
-                    self.test_path,
-                    self.test_masks,
-                    self.testtransforms,
-                    class_no=self.class_no
-                )
-        elif self.dataset == ClivDSTypes.MMIS:
+        if self.dataset == ClivDSTypes.MMIS:
             if stage == "fit":
                 self.train_data = ClivMMISDataset(
                     self.data_path + self.train_path,
@@ -120,6 +99,35 @@ class ClivDataModule(LightningDataModule):
                     xkeys=['img'],
                     annotators=self.test_masks,
                 )
+        elif self.dataset == ClivDSTypes.QUBIQ:
+            if stage == "fit":
+                self.train_data = ClivQUIBDataset(
+                    self.data_path + self.train_path,
+                    self.traintransforms,
+                    annotators=self.train_masks,
+                    annotator_overlap=self.annotator_overlap,
+                    seed=self.seed,
+                    task_id=self.task_id
+                )
+                self.val_data = ClivQUIBDataset(
+                    self.data_path + self.val_path,
+                    self.valtransforms,
+                    annotators=self.val_masks,
+                    annotator_overlap=self.annotator_overlap,
+                    seed=self.seed,
+                    task_id=self.task_id
+                )
+            elif stage == "test":
+                self.test_data = ClivQUIBDataset(
+                    self.data_path + self.test_path,
+                    self.testtransforms,
+                    annotators=self.test_masks,
+                    annotator_overlap=self.annotator_overlap,
+                    seed=self.seed,
+                    task_id=self.task_id
+                )
+        else:
+            raise NotImplementedError("DS Type not implemented.")
 
     def train_dataloader(self):
         return DataLoader(

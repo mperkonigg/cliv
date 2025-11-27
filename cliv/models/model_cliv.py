@@ -170,7 +170,7 @@ class ClivModel(nn.Module):
 
     def forward(self, batch, annotator_ids: torch.Tensor, annotator_list: list = None):
         if annotator_list is not None:
-            ann_ids = self.map_annotators_to_correct_id(ann_ids, annotator_list)
+            annotator_ids = self.map_annotators_to_correct_id(annotator_ids, annotator_list)
 
         self.unet_features = self.unet.forward(batch)
         z = self.z.forward(annotator_ids)

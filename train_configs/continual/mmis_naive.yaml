@@ -3,7 +3,7 @@ output_path: '</path/to/output/>'
 matmul_precision: 'medium'
 
 datamodule:
-    +class: cliv.datasets.ClivMMISDataModule
+    +class: cliv.datasets.ClivDataModule
     data_path: '</path/to/dataset>'
     train_path: 'training'
     train_masks: ['label_a2']

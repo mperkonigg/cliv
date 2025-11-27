@@ -1,2 +1,2 @@
 from .cliv_datamodule import ClivDataModule
-from .cliv_dataset import ClivDataset, ClivMMISDataset, ClivDSTypes
+from .cliv_dataset import ClivQUIBDataset, ClivMMISDataset, ClivDSTypes

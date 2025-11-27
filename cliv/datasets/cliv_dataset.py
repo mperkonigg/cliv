@@ -1,99 +1,16 @@
 import os
 import torch
 import numpy as np
-import pandas as pd
-import cv2
 import random
 import h5py
-from typing import Callable
+from typing import Callable, Union
 from enum import Enum
-
+from glob import glob
+import SimpleITK as sitk
 
 class ClivDSTypes(Enum):
-    GLEASON19 = 1
-    MMIS = 2
-
-
-class ClivDataset(torch.utils.data.Dataset):
-    """Crowdsourced_Dataset Dataset. Read images, apply augmentation and preprocessing transformations.
-    Args:
-        image_path (str): path to images folder
-        masks_dir (str): path to segmentation masks folder
-        class_values (list): values of classes to extract from segmentation mask
-        augmentation (albumentations.Compose): data transfromation pipeline
-            (e.g. flip, scale, etc.)
-    """
-
-    def __init__(
-            self,
-            data_path,
-            image_path,
-            masks_dirs,
-            augmentation=None,
-            annotator_ids='auto',
-    ):
-
-        image_path = os.path.join(data_path, image_path)
-
-        mask_paths = [os.path.join(data_path, m) for m in masks_dirs]
-        self.annotators = [x.split('/')[-1] for x in masks_dirs]
-        self.mask_paths = mask_paths
-
-        self.ids = self.get_valid_ids(os.listdir(image_path), mask_paths)
-        self.images_fps = [os.path.join(image_path, image_id)
-                           for image_id in self.ids]
-
-        self.annotators_no = len(self.annotators)
-        self.augmentation = augmentation
-        self.annotator_ids = annotator_ids
-
-    def __getitem__(self, i):
-        # read data
-        image = cv2.imread(self.images_fps[i])
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        indexes = np.random.permutation(self.annotators_no)
-        mask_found = False
-        for ann_index in indexes:
-            ann_path = self.mask_paths[ann_index]
-            mask_path = os.path.join(ann_path, self.ids[i])
-            if os.path.exists(mask_path):
-                mask = cv2.imread(mask_path, 0)
-                id = self.mask_paths.index(ann_path)
-                if self.annotator_ids == 'auto':
-                    annotator_id = id
-                else:
-                    annotator_id = self.annotator_ids[id]
-                mask_found = True
-                break
-            else:
-                continue
-        if not mask_found:
-            raise Exception('No mask was found for image: ' +
-                            self.images_fps[i])
-        # apply augmentations
-        if self.augmentation:
-            sample = self.augmentation({"image": image, "mask": mask})
-            image = sample['image']
-            mask = sample['mask']
-
-        return image, mask, self.ids[i], annotator_id
-
-    def __len__(self):
-        return len(self.ids)
-
-    def get_valid_ids(self, image_ids, mask_paths):
-        """
-        Returns all image ids that have at least one corresponding annotated mask
-        """
-        all_masks = []
-        for p in range(len(mask_paths)):
-            mask_ids = os.listdir(mask_paths[p])
-            for m in mask_ids:
-                all_masks.append(m)
-        all_unique_masks = np.unique(all_masks)
-        valid_ids = np.intersect1d(image_ids, all_unique_masks)
-
-        return valid_ids
+    MMIS = 1
+    QUBIQ = 2
 
 
 class ClivMMISDataset(torch.utils.data.Dataset):
@@ -179,3 +96,86 @@ class ClivMMISDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.h5_files)
+
+class ClivQUIBDataset(torch.utils.data.Dataset):
+    """Dataset using the QUIB Datasets
+
+        Args:
+            data_path (_type_): path to the data of QUIB
+            transforms (_type_, optional): transforms to apply. Defaults to None.
+            annotators (list, optional): annotator labels to use. Defaults to ['seg01', 'seg02', 'seg03', 'seg04', 'seg05', 'seg06'] prostate use case.
+    """
+
+    def __init__(
+            self,
+            data_path: str,
+            transforms: Callable = None,
+            task_id: Union[list[str], str]="task01", #some QUIB datasets have more than one tasks
+            annotators: list[str] = ['seg01', 'seg02', 'seg03', 'seg04', 'seg05', 'seg06'],
+            annotator_overlap: float = None,
+            seed: int = 0,
+            recode_classes: dict = None,
+            recoded_channels: int=12,
+    ):
+        self.case_dirs = [d for d in glob(f"{data_path}/*") if os.path.isdir(d)]
+
+        # we have to get rid of case_dirs for which no annotator has a segmentation
+        if type(task_id) is str:
+            task_id = [task_id]
+        
+        for cd in self.case_dirs:
+            remove_cd = False
+            for tid in task_id:
+                if not np.any([os.path.exists(os.path.join(cd, f"{tid}_{annot}.nii.gz")) for annot in annotators]):
+                    remove_cd = True
+            if remove_cd:
+                self.case_dirs.remove(cd)
+
+        self.task_id = task_id
+        self.annotator_overlap = annotator_overlap
+        self.recode_classes = recode_classes
+        self.recoded_channels = recoded_channels
+
+        if annotator_overlap is not None:
+            raise NotImplementedError #TODO: later after base experiments are running
+
+        self.transforms = transforms
+        self.annotators = annotators
+        self.data_path = data_path
+
+
+    def __getitem__(self, i):
+        # read data
+        if self.annotator_overlap is None:
+            seg_paths = None
+            while seg_paths is None:
+                data = self.case_dirs[i]
+                # choose one of the annotators at random
+                id = random.randint(0, len(self.annotators)-1)
+                annotator_id = self.annotators[id]
+                if np.all([os.path.exists(os.path.join(data, f"{tid}_{annotator_id}.nii.gz")) for tid in self.task_id]):
+                    seg_paths = [os.path.join(data, f"{tid}_{annotator_id}.nii.gz") for tid in self.task_id]
+        else:
+            raise NotImplementedError 
+        
+        img = torch.tensor(sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(data, "image.nii.gz"))), dtype=torch.long)
+        seg = torch.tensor(np.concatenate([sitk.GetArrayFromImage(sitk.ReadImage(sp)) for sp in seg_paths]), dtype=torch.long)
+
+        dataentry = {"img": img, "label": seg}
+
+        if self.recode_classes is not None:
+            recoded_labels = torch.zeros((self.recoded_channels, dataentry["label"].shape[1], dataentry["label"].shape[2]))
+
+            for k, v in self.recode_classes.items():
+                recoded_labels[v] = dataentry["label"][k]
+            dataentry["label"] = recoded_labels
+        
+        if self.transforms is not None:
+            dataentry = self.transforms(dataentry)
+
+        x = dataentry["img"]
+
+        return x, dataentry["label"], annotator_id, id
+
+    def __len__(self):
+        return len(self.case_dirs)
